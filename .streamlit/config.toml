@@ -1,0 +1,4 @@
+[theme]
+primaryColor = "#0084FF"
+# base, backgroundColor, etc. removidos para permitir toggle automatico (Light/Dark) pelo usuario
+# font = "sans serif"

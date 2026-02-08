@@ -1,0 +1,226 @@
+{
+    "ADE": {
+        "transit_time": 1,
+        "agency_time": 1
+    },
+    "AGP": {
+        "transit_time": 1,
+        "agency_time": 1
+    },
+    "AN2": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "AN4": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "ANA": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "B4M": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "BR4": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "CLN": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "CS8": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "FM5": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "FS4": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "GN6": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "GRI": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "GV3": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "GVS": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "IBT": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "IMB": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "IN2": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "ISR": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "JM2": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "MAB": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "MI3": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "MIC": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "MRC": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "PGS": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "PL4": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "PUB": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "PV3": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RAC": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RAN": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RB4": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RBA": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RDF": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RGO": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RMG": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RMT": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RRO": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RRS": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RSC": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RTO": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RV4": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "RVM": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "S2R": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "SLS": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "SMT": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "SOF": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "SPA": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "SRA": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "TBR": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "TDD": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "TOR": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "TP2": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "UNI": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "VGR": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "VL3": {
+        "transit_time": 0,
+        "agency_time": 0
+    },
+    "VP2": {
+        "transit_time": 0,
+        "agency_time": 0
+    }
+}
