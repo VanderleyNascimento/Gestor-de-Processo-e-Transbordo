@@ -410,7 +410,7 @@ def render_gestao_lacres(df):
 
 
 def render_home():
-    st.title("Bem-vindo ao Loggi Transbordo", anchor=False)
+    st.title("Bem-vindo ao XDDF Transbordo", anchor=False)
     
     st.markdown("""
     <div class='info-box'>
