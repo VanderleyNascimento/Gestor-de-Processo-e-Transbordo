@@ -80,3 +80,20 @@ Este projeto é uma solução proprietária para análise logística, focada em 
 
 ---
 *Atualizado em: Fevereiro de 2026*
+
+---
+
+## 🔒 Licença e Segurança
+
+> **AVISO LEGAL:** Este software é protegido por leis de direitos autorais e propriedade intelectual.
+
+O uso deste código fonte ou da aplicação compilada está sujeito aos seguintes termos:
+
+1.  **Uso Pessoal/Acadêmico**: Permitido apenas para fins de estudo e demonstração pessoal, desde que mantidos os créditos originais ao autor **Vanderley Nascimento**.
+2.  **Uso Comercial**: É estritamente **PROIBIDO** o uso comercial, venda, distribuição ou modificação deste software sem a prévia autorização por escrito do autor ou aquisição de uma licença comercial.
+3.  **Remoção de Créditos**: A remoção ou alteração dos créditos do autor configura violação dos termos de uso.
+
+**Para adquirir uma licença comercial ou solicitar permissão de uso:**
+Entre em contato diretamente com o desenvolvedor.
+
+&copy; 2026 Vanderley Nascimento. Todos os direitos reservados.
