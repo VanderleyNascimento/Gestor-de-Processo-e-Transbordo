@@ -1,4 +1,4 @@
-# 🚚 Loggi - Gestor de Processo e Transbordo
+# 🚚 XDDF - Gestor de Processo e Transbordo
 
 Este é um aplicativo analítico desenvolvido em **Streamlit** para otimizar a gestão logística de pacotes, segregando fluxos de **Transbordo** e **Processo**, monitorando SLAs e rastreando veículos.
 
