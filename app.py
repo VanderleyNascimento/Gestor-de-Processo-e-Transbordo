@@ -4,6 +4,7 @@ import plotly.express as px
 import utils
 import config_manager
 from streamlit_option_menu import option_menu
+from datetime import datetime
 
 # Configuração da página
 st.set_page_config(
@@ -158,7 +159,7 @@ def main():
     with st.sidebar:
         page = option_menu(
             "Navegação", 
-            ["Dashboard Geral", "Detalhamento e KPIs", "Gestão de Malotes", "Gestão de SLA"],
+            ["Dashboard Geral", "Detalhamento e KPIs", "Gestão de Lacres", "Gestão de SLA"],
             icons=['speedometer2', 'bar-chart-line', 'box-seam', 'exclamation-triangle'],
             menu_icon="compass", 
             default_index=0,
@@ -209,8 +210,8 @@ def main():
                 render_dashboard_geral(df_processed)
             elif page == "Detalhamento e KPIs":
                 render_detalhamento_kpis(df_processed)
-            elif page == "Gestão de Malotes":
-                render_gestao_malotes(df_processed)
+            elif page == "Gestão de Lacres":
+                render_gestao_lacres(df_processed)
             elif page == "Gestão de SLA":
                 render_sla_expedicao(df_processed)
         
@@ -221,9 +222,9 @@ def main():
 
 # ... (Existing functions)
 
-def render_gestao_malotes(df):
-    st.title("Gestão de Malotes", anchor=False)
-    st.markdown("#### :material/package_2: Visão agrupada por Malotes, vinculando agências e veículos.")
+def render_gestao_lacres(df):
+    st.title("Gestão de Lacres", anchor=False)
+    st.markdown("#### :material/package_2: Visão agrupada por Lacres, vinculando agências e veículos.")
     st.markdown("---")
     
     if 'seal' not in df.columns:
@@ -238,11 +239,17 @@ def render_gestao_malotes(df):
     f_col1, f_col2, f_col3, f_col4 = st.columns(4)
     
     with f_col1:
-        search_seal = st.text_input("Buscar Malote (Seal)", placeholder="Ex: CJ2...")
+        search_seal = st.text_input("Buscar Lacre (Seal)", placeholder="Ex: CJ2...")
     with f_col2:
         filtro_agencia = st.multiselect("Destino", options=sorted(df_seals['agência_destino_anotacao'].unique()))
     with f_col3:
-        filtro_veiculo = st.multiselect("Veículo", options=sorted(df_seals['Tipo_Veiculo'].unique()))
+        # Filtro de Veículo (Identificador Real - Placa)
+        if 'Identificador' in df_seals.columns:
+            veiculos_reais = sorted([v for v in df_seals['Identificador'].dropna().unique() if v not in ['-', 'Indefinido', '']])
+            filtro_veiculo = st.multiselect("Veículo/Placa", options=veiculos_reais)
+        else:
+            filtro_veiculo = []
+
     with f_col4:
         # Filtro de Data Promessa
         min_date = pd.to_datetime(df_seals['Data_Promessa_Min']).min()
@@ -260,7 +267,7 @@ def render_gestao_malotes(df):
     if filtro_agencia:
         df_view = df_view[df_view['agência_destino_anotacao'].isin(filtro_agencia)]
     if filtro_veiculo:
-        df_view = df_view[df_view['Tipo_Veiculo'].isin(filtro_veiculo)]
+        df_view = df_view[df_view['Identificador'].isin(filtro_veiculo)]
     if date_range and len(date_range) == 2:
          df_view['Data_Promessa_Min'] = pd.to_datetime(df_view['Data_Promessa_Min'])
          df_view = df_view[
@@ -270,11 +277,11 @@ def render_gestao_malotes(df):
 
     # KPIs Rápidos
     k1, k2, k3 = st.columns(3)
-    k1.metric("Total de Malotes", len(df_view))
+    k1.metric("Total de Lacres", len(df_view))
     k2.metric("Total de Pacotes", f"{df_view['Qtd_Pacotes'].sum():,}".replace(",", "."))
     k3.metric("Veículos Distintos", df_view['Identificador'].nunique())
     
-    st.markdown("### Lista de Malotes")
+    st.markdown("### Lista de Lacres")
     
     # Exibir Tabela Interativa
     event = st.dataframe(
@@ -288,21 +295,21 @@ def render_gestao_malotes(df):
         }
     )
     
-    # Drill-down (Detalhes do Malote Selecionado)
+    # Drill-down (Detalhes do Lacre Selecionado)
     selected_indices = event.selection.rows
     
-    # Gerenciamento de Estado de Visualização (Malotes)
-    if 'last_selected_malotes' not in st.session_state:
-        st.session_state['last_selected_malotes'] = None
-    if 'show_details_malotes' not in st.session_state:
-        st.session_state['show_details_malotes'] = False
+    # Gerenciamento de Estado de Visualização (Lacres)
+    if 'last_selected_lacres' not in st.session_state:
+        st.session_state['last_selected_lacres'] = None
+    if 'show_details_lacres' not in st.session_state:
+        st.session_state['show_details_lacres'] = False
         
     # Lógica de Detecção de Mudança
-    if selected_indices != st.session_state['last_selected_malotes']:
-        st.session_state['last_selected_malotes'] = selected_indices
-        st.session_state['show_details_malotes'] = True if selected_indices else False
+    if selected_indices != st.session_state['last_selected_lacres']:
+        st.session_state['last_selected_lacres'] = selected_indices
+        st.session_state['show_details_lacres'] = True if selected_indices else False
 
-    if st.session_state['show_details_malotes'] and selected_indices:
+    if st.session_state['show_details_lacres'] and selected_indices:
         selected_index = selected_indices[0]
         # Validar índice
         if selected_index < len(df_view):
@@ -310,7 +317,7 @@ def render_gestao_malotes(df):
             seal_selecionado = selected_row['seal']
             
             st.divider()
-            st.subheader(f":material/search: Detalhes do Malote: {seal_selecionado}")
+            st.subheader(f":material/search: Detalhes do Lacre: {seal_selecionado}")
             st.caption(f"Destino: {selected_row['agência_destino_anotacao']} | Veículo: {selected_row['Identificador']}")
             
             # Filtrar pacotes originais deste seal
@@ -326,8 +333,8 @@ def render_gestao_malotes(df):
                 }
             )
             
-            if st.button("Fechar Detalhes", key="btn_close_malotes", icon=":material/close:"):
-                st.session_state['show_details_malotes'] = False
+            if st.button("Fechar Detalhes", key="btn_close_lacres", icon=":material/close:"):
+                st.session_state['show_details_lacres'] = False
                 st.rerun()
 
 
@@ -360,7 +367,7 @@ def render_home():
     st.subheader(":material/rocket_launch: Funcionalidades Principais")
     row1 = st.columns(2)
     row1[0].markdown("""
-    **Gestão de Malotes**
+    **Gestão de Lacres**
     - Agrupamento inteligente por Seal.
     - Identificação de veículos e placas.
     - Drill-down para ver pacotes individuais.
@@ -375,29 +382,74 @@ def render_home():
 
 def render_dashboard_geral(df):
     st.title("Dashboard Geral", anchor=False)
-    st.markdown("#### :material/bar_chart: Visão consolidada de volume por agência e categoria.")
+    st.markdown("#### :material/bar_chart: Visão consolidada de volume por agência, categoria e veículos.")
     st.markdown("---")
     
-    # Filtros
+    # Filtros Linha 1
     col_f1, col_f2 = st.columns(2)
     with col_f1:
         cat_filter = st.multiselect("Filtrar Categoria", ["Transbordo", "Processo"], default=["Transbordo", "Processo"])
+    with col_f2:
+        # Filtro de Agências (Novo)
+        all_agencies = sorted(df['agência_destino_anotacao'].unique()) if 'agência_destino_anotacao' in df.columns else []
+        agency_filter = st.multiselect("Filtrar Agências", all_agencies, placeholder="Todas as agências")
     
+    # Filtros Linha 2 (Novos)
+    col_f3, col_f4 = st.columns(2)
+    
+    # Filtro de Veículos
+    with col_f3:
+        if 'Identificador' in df.columns:
+            # Opções de veículos (remove nulos e vazios para a lista)
+            veiculos_opcoes = sorted([v for v in df['Identificador'].dropna().unique() if v not in ['-', 'Indefinido', '']])
+            veiculo_filter = st.multiselect("Filtrar Veículos (Placa/ID)", veiculos_opcoes, placeholder="Todos os veículos")
+        else:
+            veiculo_filter = []
+
+    # Filtro de Arquivos
+    with col_f4:
+        if 'source_file' in df.columns:
+            arquivos_opcoes = sorted(df['source_file'].dropna().unique())
+            arquivo_filter = st.multiselect("Filtrar Arquivo de Origem", arquivos_opcoes, placeholder="Todos os arquivos")
+        else:
+            arquivo_filter = []
+    
+    # Aplicar Filtros
     df_filtered = df[df['Categoria'].isin(cat_filter)]
     
+    if agency_filter:
+        df_filtered = df_filtered[df_filtered['agência_destino_anotacao'].isin(agency_filter)]
+        
+    if veiculo_filter:
+         df_filtered = df_filtered[df_filtered['Identificador'].isin(veiculo_filter)]
+         
+    if arquivo_filter:
+         df_filtered = df_filtered[df_filtered['source_file'].isin(arquivo_filter)]
+    
     # KPIs Topo
-    kpi1, kpi2, kpi3 = st.columns(3)
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
     total = len(df_filtered)
     vol_transbordo = len(df_filtered[df_filtered['Categoria'] == 'Transbordo'])
     vol_processo = len(df_filtered[df_filtered['Categoria'] == 'Processo'])
     
+    # KPI de Veículos (Novo)
+    if 'Identificador' in df_filtered.columns:
+        # Conta veículos únicos que não sejam placeholder
+        veiculos_unicos = df_filtered[
+            (~df_filtered['Identificador'].isin(['-', 'Indefinido'])) & 
+            (df_filtered['Identificador'].notna())
+        ]['Identificador'].nunique()
+    else:
+        veiculos_unicos = 0
+    
     kpi1.metric("Volume Total", f"{total:,}".replace(",", "."))
     kpi2.metric("Transbordo", f"{vol_transbordo:,} ({vol_transbordo/total*100:.1f}%)" if total else "0")
     kpi3.metric("Processo", f"{vol_processo:,} ({vol_processo/total*100:.1f}%)" if total else "0")
+    kpi4.metric("Veículos Envolvidos", veiculos_unicos)
     
     st.markdown("### Volume por Agência")
     
-    # Gráfico
+    # Gráfico Principal
     agrupado = df_filtered.groupby(['agência_destino_anotacao', 'Categoria']).size().reset_index(name='Volume')
     agrupado = agrupado.sort_values('Volume', ascending=False)
     
@@ -408,6 +460,84 @@ def render_dashboard_geral(df):
     )
     fig.update_layout(xaxis_title="Agência", yaxis_title="Volume")
     st.plotly_chart(fig, use_container_width=True)
+    
+    # --- Exportação de Dados (Agências) ---
+    if not df_filtered.empty:
+        # Pivotar dados: Agência x Categoria
+        df_export = df_filtered.groupby(['agência_destino_anotacao', 'Categoria']).size().unstack(fill_value=0)
+        
+        # Garantir colunas
+        if 'Transbordo' not in df_export.columns: df_export['Transbordo'] = 0
+        if 'Processo' not in df_export.columns: df_export['Processo'] = 0
+        
+        # Calcular Totais
+        df_export['Total Geral'] = df_export['Transbordo'] + df_export['Processo']
+        
+        # Calcular Grand Total (Soma de todos os itens do contexto atual)
+        grand_total = df_export['Total Geral'].sum()
+        
+        # Calcular Percentuais baseados no TOTAL GERAL (Share of Total)
+        # Ex: Se Total Geral é 100 e Agência X tem 12 Transbordo, % Transbordo = 12%
+        if grand_total > 0:
+            df_export['% Transbordo'] = (df_export['Transbordo'] / grand_total * 100).fillna(0).round(2)
+            df_export['% Processo'] = (df_export['Processo'] / grand_total * 100).fillna(0).round(2)
+            df_export['% do Total'] = (df_export['Total Geral'] / grand_total * 100).fillna(0).round(2)
+        else:
+            df_export['% Transbordo'] = 0.0
+            df_export['% Processo'] = 0.0
+            df_export['% do Total'] = 0.0
+        
+        # Ordenar e formatar
+        df_export = df_export.sort_values('Total Geral', ascending=False)
+        
+        # Renomear índice para o CSV
+        df_export.index.name = "Agencias/ leves"
+        
+        # Botão de Download
+        csv_export = df_export.to_csv().encode('utf-8')
+        
+        # Nome do arquivo dinâmico
+        timestamp = datetime.now().strftime("%d-%m-%Y_%H-%M")
+        file_name = f"Relatorio_Volume_Agencias_{timestamp}.csv"
+        
+        st.download_button(
+            label=f"Baixar Relatório Detalhado (CSV) - Total: {grand_total}",
+            data=csv_export,
+            file_name=file_name,
+            mime="text/csv"
+        )
+    
+    # --- Visão de Veículos (Novo) ---
+    if veiculos_unicos > 0:
+        st.markdown("### :material/local_shipping: Veículos e Caminhões")
+        cv1, cv2 = st.columns([1, 1])
+        
+        with cv1:
+            st.markdown("#### Top Veículos por Volume")
+            df_veiculos = df_filtered[
+                (~df_filtered['Identificador'].isin(['-', 'Indefinido']))
+            ].groupby(['Identificador', 'Tipo_Veiculo']).size().reset_index(name='Volume')
+            
+            df_veiculos = df_veiculos.sort_values('Volume', ascending=False).head(10)
+            
+            fig_veiculos = px.bar(
+                df_veiculos,
+                x='Volume',
+                y='Identificador',
+                orientation='h',
+                color='Tipo_Veiculo',
+                text='Volume'
+            )
+            fig_veiculos.update_layout(yaxis=dict(autorange="reversed"))
+            st.plotly_chart(fig_veiculos, use_container_width=True)
+            
+        with cv2:
+            st.markdown("#### Detalhes")
+            st.dataframe(
+                df_veiculos,
+                use_container_width=True,
+                hide_index=True
+            )
     
     st.markdown("---")
     
@@ -665,7 +795,7 @@ def render_detalhamento_kpis(df):
         hide_index=True,
         column_config={
             "package_id": "Pacote",
-            "seal": "Malote",
+            "seal": "Lacre",
             "agência_destino_anotacao": "Agência",
             "promised_date": st.column_config.DateColumn("Promessa", format="DD/MM/YYYY"),
             "Status_Prazo": st.column_config.TextColumn("Status"),
@@ -677,7 +807,7 @@ def render_sla_expedicao(df):
     
     # Explicação Visual da Fórmula
     with st.expander("Entenda o Cálculo do SLO (Expedição)", expanded=True, icon=":material/info:"):
-        st.markdown("O sistema calcula a data limite para o malote sair da origem (SLO) usando a seguinte lógica:")
+        st.markdown("O sistema calcula a data limite para o lacre sair da origem (SLO) usando a seguinte lógica:")
         st.latex(r'''
         \text{Data Limite Expedição} = \text{Data Promessa} - \text{Buffer (1 Dia)} - \text{Tempo Trânsito} - \text{Tempo Agência}
         ''')
@@ -720,7 +850,7 @@ def render_sla_expedicao(df):
         current_config = config_manager.load_config()
         df_sla = utils.calculate_slo(df, current_config)
     
-    # 3. Visão de Malotes Críticos
+    # 3. Visão de Lacres Críticos
     def get_seal_urgency(series):
         if "Atrasado (Crítico)" in series.values:
             return "Crítico"
@@ -758,7 +888,7 @@ def render_sla_expedicao(df):
         
         # --- Filtros Avançados SLA ---
         st.subheader(f":material/calendar_month: Monitoramento de Expedição")
-        st.caption("Utilize os filtros abaixo para localizar malotes específicos ou focar em agências.")
+        st.caption("Utilize os filtros abaixo para localizar lacres específicos ou focar em agências.")
         
         filtro_col1, filtro_col2, filtro_col3, filtro_col4 = st.columns(4)
         
@@ -807,7 +937,7 @@ def render_sla_expedicao(df):
         
         # Visualização Condicional
         if df_view.empty:
-            st.success("Nenhum malote pendente com os filtros selecionados!", icon=":material/check_circle:")
+            st.success("Nenhum lacre pendente com os filtros selecionados!", icon=":material/check_circle:")
         else:
             # Tabela Interativa (Master)
             # Função de Estilo Pandas
@@ -848,7 +978,7 @@ def render_sla_expedicao(df):
                 # Container de Detalhes com Estilo Distinto
                 st.markdown("---")
                 with st.container():
-                    st.markdown(f"### :material/expand_more: Detalhando Malote: `{seal_selecionado}`")
+                    st.markdown(f"### :material/expand_more: Detalhando Lacre: `{seal_selecionado}`")
                     st.caption(f"Agência: **{selected_row['agência_destino_anotacao']}** | Status: **{selected_row['Status_Expedicao']}**")
                     
                     # Filtrar e Ordenar Pacotes
@@ -877,7 +1007,7 @@ def render_sla_expedicao(df):
                         st.rerun()
         
     else:
-        st.error("⚠️ Coluna 'seal' não encontrada. Verifique se o arquivo contém dados de malotes.")
+        st.error("⚠️ Coluna 'seal' não encontrada. Verifique se o arquivo contém dados de lacres.")
 
 if __name__ == "__main__":
     main()

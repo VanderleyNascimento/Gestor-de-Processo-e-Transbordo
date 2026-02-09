@@ -1,38 +1,82 @@
-# Streamlit App - Análise de Pacotes
+# 🚚 Loggi - Gestor de Processo e Transbordo
 
-Este é um aplicativo Streamlit para análise de pacotes e classificação de agências (Processo vs Trasbordo).
+Este é um aplicativo analítico desenvolvido em **Streamlit** para otimizar a gestão logística de pacotes, segregando fluxos de **Transbordo** e **Processo**, monitorando SLAs e rastreando veículos.
 
-## Pré-requisitos
+A ferramenta centraliza dados de múltiplas fontes CSV, oferecendo visões estratégicas e táticas para tomada de decisão em tempo real.
 
-Certifique-se de ter o Python instalado. O projeto utiliza um ambiente virtual (`.venv`) para gerenciar as dependências.
+---
 
-## Como Executar
+## 🚀 Funcionalidades Principais
 
-O comando `streamlit` pode não estar no seu PATH global se você não ativou o ambiente virtual. 
+### 1. Dashboard Geral
+Visão consolidada do volume operacional.
+-   **KPIs em Tempo Real**: Volume Total, Transbordo vs. Processo, Veículos Envolvidos.
+-   **Filtros Dinâmicos**: Filtre por Agência, Categoria (Transbordo/Processo), Veículo (Placa/ID) e Arquivo de Origem.
+-   **Rastreamento de Veículos**: Identificação automática de caminhões e suas cargas.
+-   **Exportação de Dados**: Geração de relatórios CSV detalhados por agência, incluindo cálculo automático de participação (% Share) no volume total.
 
-Para facilitar, você pode usar o script de execução incluído:
+### 2. Gestão de Lacres (Antigo "Malotes")
+Foco na unidade de transporte (Seal/Lacre).
+-   **Busca Inteligente**: Localize lacres específicos ou filtre por destino e veículo.
+-   **Drill-Down**: Clique em um lacre para ver todos os pacotes contidos nele.
+-   **Visualização de Frota**: Filtre lacres associados a veículos específicos (ex: Placas reais extraídas do banco de dados).
 
-### Opção 1: Usando o script `run.sh` (Recomendado no Linux/Mac)
+### 3. Gestão de SLA e Expedição
+Monitoramento de prazos e criticidade.
+-   **Cálculo de SLO**: Determinação automática da Data Limite de Expedição baseada na promessa de entrega, tempo de trânsito e processamento.
+-   **Alertas de Risco**: Identificação visual de lacres Críticos, em Atenção ou Para Expedir Hoje.
+-   **Configuração Personalizável**: Ajuste os tempos de trânsito e processamento por agência diretamente na interface.
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+-   **Python 3.12+**
+-   **Streamlit**: Framework para Web Apps de Dados.
+-   **Pandas**: Manipulação e análise de dados de alta performance.
+-   **Plotly Express**: Visualizações interativas.
+-   **Git/GitHub**: Controle de versão.
+
+---
+
+## 📦 Como Executar
+
+Certifique-se de ter o Python instalado e o ambiente virtual configurado.
+
+### Configuração Inicial (Primeira vez)
+
+```bash
+# Criar ambiente virtual
+python3 -m venv .venv
+
+# Ativar ambiente
+source .venv/bin/activate
+
+# Instalar dependências
+pip install -r requirements.txt
+```
+
+### Executando a Aplicação
+
+Para facilitar, utilize o script incluído:
 
 ```bash
 ./run.sh
 ```
 
-### Opção 2: Ativando o ambiente virtual manualmente
-
-```bash
-source .venv/bin/activate
-streamlit run app.py
-```
-
-### Opção 3: Executando diretamente do ambiente virtual
+Ou execute manualmente:
 
 ```bash
 .venv/bin/streamlit run app.py
 ```
 
-## Estrutura do Projeto
+---
 
--   `app.py`: Arquivo principal da aplicação.
--   `utils.py`: Funções utilitárias para carregamento e processamento de dados.
--   `run.sh`: Script auxiliar para execução.
+## 🤝 Créditos e Desenvolvimento
+
+**Desenvolvido por:** Vanderley Nascimento
+
+Este projeto é uma solução proprietária para análise logística, focada em eficiência operacional e visibilidade de dados.
+
+---
+*Atualizado em: Fevereiro de 2026*

@@ -22,7 +22,9 @@ def load_and_combine_data(uploaded_files):
                 # Tenta separador de ponto e vírgula se vírgula falhar
                 file.seek(0)
                 df = pd.read_csv(file, encoding='utf-8', sep=';')
-                
+            
+            # Rastrear origem
+            df['source_file'] = file.name
             all_dfs.append(df)
         except Exception as e:
             st.error(f"Erro ao ler o arquivo {file.name}: {e}")
@@ -50,6 +52,7 @@ def classify_agency(agency_name, trasbordo_list):
 def process_data(df, trasbordo_list):
     """
     Aplica a classificação de agências ao DataFrame e garante tipos corretos.
+    Também extrai informações de veículos (Tipo e Identificador) do contexto.
     """
     if df.empty:
         return df
@@ -65,6 +68,17 @@ def process_data(df, trasbordo_list):
             lambda x: classify_agency(x, trasbordo_list)
         )
     
+    # Extração Global de Veículos (Novidade)
+    if 'contexto_atual' in df_processed.columns:
+        # Aplica a função e expande o resultado (tupla) em duas colunas
+        vehicle_data = df_processed['contexto_atual'].apply(parse_vehicle_info)
+        # Cria as colunas a partir da lista de tuplas
+        df_processed['Tipo_Veiculo'] = [x[0] for x in vehicle_data]
+        df_processed['Identificador'] = [x[1] for x in vehicle_data]
+    else:
+        df_processed['Tipo_Veiculo'] = "Indefinido"
+        df_processed['Identificador'] = "-"
+
     # Tratamento de datas (se existirem)
     if 'promised_date' in df_processed.columns:
         df_processed['promised_date'] = pd.to_datetime(df_processed['promised_date'], errors='coerce', dayfirst=True)
@@ -116,26 +130,37 @@ def parse_vehicle_info(context_str):
 @st.cache_data
 def group_data_by_seal(df):
     """
-    Agrupa os dados por Seal (Malote), consolidando informações.
+    Agrupa os dados por Seal (Lacre), consolidando informações.
+    Agora aproveita as colunas Tipo_Veiculo e Identificador já processadas.
     """
     if 'seal' not in df.columns:
         return pd.DataFrame()
 
     # Agrupamento
-    # Assume que todos os pacotes do mesmo seal têm a mesma agência e contexto (ou pega o primeiro/mais comum)
-    df_grouped = df.groupby('seal').agg({
+    # Define dicionário de agregação dinamicamente para evitar erros se colunas não existirem
+    agg_dict = {
         'package_id': 'count',
         'agência_destino_anotacao': lambda x: x.mode()[0] if not x.mode().empty else "Indefinido",
         'contexto_atual': lambda x: x.mode()[0] if not x.mode().empty else pd.NA,
         'promised_date': 'min' # Data mais crítica (menor)
-    }).reset_index()
+    }
+
+    # Se as colunas de veículo já existirem (process_data foi chamado), usa elas
+    if 'Tipo_Veiculo' in df.columns:
+        agg_dict['Tipo_Veiculo'] = lambda x: x.mode()[0] if not x.mode().empty else "Indefinido"
+    if 'Identificador' in df.columns:
+        agg_dict['Identificador'] = lambda x: x.mode()[0] if not x.mode().empty else "-"
+
+    df_grouped = df.groupby('seal').agg(agg_dict).reset_index()
     
     df_grouped.rename(columns={'package_id': 'Qtd_Pacotes', 'promised_date': 'Data_Promessa_Min'}, inplace=True)
     
-    # Enriquecer com info do veículo
-    extra_info = df_grouped['contexto_atual'].apply(parse_vehicle_info)
-    df_grouped['Tipo_Veiculo'] = [x[0] for x in extra_info]
-    df_grouped['Identificador'] = [x[1] for x in extra_info]
+    # A extração agora é feita no process_data, então não precisamos refazer aqui
+    # Apenas garantimos que as colunas existam (mecanismo de fallback caso usem função isolada)
+    if 'Tipo_Veiculo' not in df_grouped.columns:
+         extra_info = df_grouped['contexto_atual'].apply(parse_vehicle_info)
+         df_grouped['Tipo_Veiculo'] = [x[0] for x in extra_info]
+         df_grouped['Identificador'] = [x[1] for x in extra_info]
     
     return df_grouped
 
