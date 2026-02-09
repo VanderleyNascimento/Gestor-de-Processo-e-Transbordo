@@ -8,7 +8,7 @@ from datetime import datetime
 
 # Configuração da página
 st.set_page_config(
-    page_title="Loggi Transbordo e Processos",
+    page_title="XDDF Transbordo e Processos",
     page_icon=":material/local_shipping:",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -24,7 +24,7 @@ def inject_custom_css():
             padding-bottom: 2rem;
         }
         
-        /* Sidebar Styling - FIXED LOGGI NAVY */
+        /* Sidebar Styling - FIXED XDDF NAVY */
         section[data-testid="stSidebar"] {
             background-color: #0d1b2a !important; /* Azul Scuro Profissional */
             border-right: 1px solid rgba(0, 132, 255, 0.2);
