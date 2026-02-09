@@ -236,13 +236,26 @@ def render_gestao_lacres(df):
     
     # --- Filtros Avançados ---
     st.markdown("### :material/search: Filtros")
-    f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+    
+    # Layout de Filtros (5 colunas para acomodar busca de pacote)
+    f_col1, f_col2, f_col3, f_col4, f_col5 = st.columns(5)
     
     with f_col1:
         search_seal = st.text_input("Buscar Lacre (Seal)", placeholder="Ex: CJ2...")
+    
     with f_col2:
-        filtro_agencia = st.multiselect("Destino", options=sorted(df_seals['agência_destino_anotacao'].unique()))
+        with st.form(key='search_form', clear_on_submit=False, border=False):
+            search_package_input = st.text_input("Buscar Pacote/Barcode", placeholder="Digite ID + Enter")
+            # Botão de busca explícito para melhorar UX
+            submitted = st.form_submit_button("🔍 Buscar Pacote", use_container_width=True)
+            
+        # O valor é atualizado quando submete ou quando aperta enter dentro do form
+        search_package = search_package_input
+        
     with f_col3:
+        filtro_agencia = st.multiselect("Destino", options=sorted(df_seals['agência_destino_anotacao'].unique()))
+    
+    with f_col4:
         # Filtro de Veículo (Identificador Real - Placa)
         if 'Identificador' in df_seals.columns:
             veiculos_reais = sorted([v for v in df_seals['Identificador'].dropna().unique() if v not in ['-', 'Indefinido', '']])
@@ -250,7 +263,7 @@ def render_gestao_lacres(df):
         else:
             filtro_veiculo = []
 
-    with f_col4:
+    with f_col5:
         # Filtro de Data Promessa
         min_date = pd.to_datetime(df_seals['Data_Promessa_Min']).min()
         max_date = pd.to_datetime(df_seals['Data_Promessa_Min']).max()
@@ -262,6 +275,46 @@ def render_gestao_lacres(df):
     df_view = df_seals.copy()
     
     # Aplicação dos Filtros
+    
+    # Lógica de Busca Reversa (Pacote -> Seal)
+    found_packages_list = [] # Armazenar IDs encontrados para destacar depois
+    
+    if search_package:
+        # Normalizar entrada: separar por vírgula ou espaço e remover vazios
+        search_terms = [t.strip() for t in search_package.replace(',', ' ').split() if t.strip()]
+        
+        if search_terms:
+            # Procurar no DataFrame original (nível pacote)
+            mask_package = pd.Series(False, index=df.index)
+            
+            for term in search_terms:
+                if 'package_id' in df.columns:
+                     mask_package |= df['package_id'].astype(str).str.contains(term, case=False, na=False)
+                if 'barcode' in df.columns:
+                     mask_package |= df['barcode'].astype(str).str.contains(term, case=False, na=False)
+            
+            # Identificar quais pacotes foram encontrados (para destaque)
+            # Vamos salvar os IDs ou Barcodes que deram match
+            df_matches = df[mask_package]
+            found_seals = df_matches['seal'].unique()
+            
+            # Guardar lista de IDs/Barcodes encontrados para uso no highlight
+            if 'package_id' in df_matches.columns:
+                found_packages_list.extend(df_matches['package_id'].astype(str).tolist())
+            if 'barcode' in df_matches.columns:
+                found_packages_list.extend(df_matches['barcode'].astype(str).tolist())
+            
+            if len(found_seals) > 0:
+                st.success(f"Encontrado(s) {len(df_matches)} pacote(s) em {len(found_seals)} lacre(s): {', '.join(found_seals)}")
+                # Filtrar a visão consolidada para mostrar apenas esses seals
+                df_view = df_view[df_view['seal'].isin(found_seals)]
+            else:
+                st.warning(f"Nenhum pacote encontrado para os termos: {', '.join(search_terms)}")
+                df_view = df_view[df_view['seal'] == 'NENHUM'] # Hack para esvaziar
+        
+    # Guardar estado da busca para usar no drill-down
+    st.session_state['highlight_packages'] = found_packages_list
+    
     if search_seal:
         df_view = df_view[df_view['seal'].str.contains(search_seal, case=False, na=False)]
     if filtro_agencia:
@@ -325,8 +378,25 @@ def render_gestao_lacres(df):
             
             # Mostrar colunas solicitadas
             cols_detalhe = ['barcode', 'nfe_key', 'company_name', 'promised_date', 'package_id', 'Status']
+            df_display = pacotes_do_seal[cols_detalhe]
+            
+            # Função para destacar linhas encontradas
+            def highlight_matches(row):
+                matches = st.session_state.get('highlight_packages', [])
+                if not matches:
+                    return [''] * len(row)
+                
+                pid = str(row['package_id']) if pd.notna(row['package_id']) else ''
+                barcode = str(row['barcode']) if pd.notna(row['barcode']) else ''
+                
+                # Verifica se o ID ou Barcode está na lista de encontrados
+                if pid in matches or barcode in matches:
+                    # Amarelo claro para destaque (compatível com light/dark mode geralmente, mas vamos forçar cor de texto escura)
+                    return ['background-color: #ffeb3b; color: black; font-weight: bold'] * len(row)
+                return [''] * len(row)
+
             st.dataframe(
-                pacotes_do_seal[cols_detalhe],
+                df_display.style.apply(highlight_matches, axis=1),
                 use_container_width=True,
                 column_config={
                     "promised_date": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY")
