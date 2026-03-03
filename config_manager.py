@@ -3,6 +3,7 @@ import os
 import pandas as pd
 
 CONFIG_FILE = "agency_config.json"
+TRANSBORDO_KEY = "__transbordo_agencies__"
 
 def load_config():
     """
@@ -63,3 +64,21 @@ def update_config_from_df(edited_df):
         
     save_config(new_config)
     return new_config
+
+def load_transbordo_agencies():
+    """
+    Retorna lista de agencias marcadas como transbordo no ultimo uso.
+    """
+    config = load_config()
+    agencies = config.get(TRANSBORDO_KEY, [])
+    if isinstance(agencies, list):
+        return [str(item) for item in agencies]
+    return []
+
+def save_transbordo_agencies(agencies):
+    """
+    Persiste a lista de agencias de transbordo no arquivo de configuracao.
+    """
+    config = load_config()
+    config[TRANSBORDO_KEY] = sorted({str(item) for item in agencies})
+    return save_config(config)

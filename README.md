@@ -1,99 +1,98 @@
 # 🚚 XDDF - Gestor de Processo e Transbordo
 
-Este é um aplicativo analítico desenvolvido em **Streamlit** para otimizar a gestão logística de pacotes, segregando fluxos de **Transbordo** e **Processo**, monitorando SLAs e rastreando veículos.
-
-A ferramenta centraliza dados de múltiplas fontes CSV, oferecendo visões estratégicas e táticas para tomada de decisão em tempo real.
+Aplicação analítica em **Streamlit** para gestão logística de pacotes, separando fluxos de **Transbordo** e **Processo**, com foco em visibilidade operacional, SLA e tomada de decisão em tempo real.
 
 ---
 
 ## 🚀 Funcionalidades Principais
 
 ### 1. Dashboard Geral
-Visão consolidada do volume operacional.
--   **KPIs em Tempo Real**: Volume Total, Transbordo vs. Processo, Veículos Envolvidos.
--   **Filtros Dinâmicos**: Filtre por Agência, Categoria (Transbordo/Processo), Veículo (Placa/ID) e Arquivo de Origem.
--   **Rastreamento de Veículos**: Identificação automática de caminhões e suas cargas.
--   **Exportação de Dados**: Geração de relatórios CSV detalhados por agência, incluindo cálculo automático de participação (% Share) no volume total.
+- KPIs de volume total, transbordo, processo e veículos.
+- Filtros por agência, categoria, veículo e arquivo de origem.
+- Exportação de relatório consolidado por agência.
 
-### 2. Gestão de Lacres (Antigo "Malotes")
-Foco na unidade de transporte (Seal/Lacre).
--   **Busca Inteligente**: Localize lacres específicos ou filtre por destino e veículo.
--   **Drill-Down**: Clique em um lacre para ver todos os pacotes contidos nele.
--   **Visualização de Frota**: Filtre lacres associados a veículos específicos (ex: Placas reais extraídas do banco de dados).
+### 2. Gestão de Lacres
+- Agrupamento por `seal` (lacre).
+- Busca por lacre, pacote e barcode.
+- Drill-down para visualizar pacotes por lacre.
 
 ### 3. Gestão de SLA e Expedição
-Monitoramento de prazos e criticidade.
--   **Cálculo de SLO**: Determinação automática da Data Limite de Expedição baseada na promessa de entrega, tempo de trânsito e processamento.
--   **Alertas de Risco**: Identificação visual de lacres Críticos, em Atenção ou Para Expedir Hoje.
--   **Configuração Personalizável**: Ajuste os tempos de trânsito e processamento por agência diretamente na interface.
+- Cálculo automático da data limite de expedição (SLO).
+- Classificação de prioridade (`Crítico`, `Expedir Hoje`, `Atenção`, `No Prazo`).
+- Diagnóstico e ação recomendada por lacre.
+
+### 4. Qualidade e Governança de Dados
+- Validação de schema (colunas obrigatórias e recomendadas).
+- Deduplicação automática de pacotes por `package_id` e `barcode`.
+- Persistência de configuração de transbordo e tempos por agência.
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
+## 🛠️ Execução Rápida
 
--   **Python 3.12+**
--   **Streamlit**: Framework para Web Apps de Dados.
--   **Pandas**: Manipulação e análise de dados de alta performance.
--   **Plotly Express**: Visualizações interativas.
--   **Git/GitHub**: Controle de versão.
-
----
-
-## 📦 Como Executar
-
-Certifique-se de ter o Python instalado e o ambiente virtual configurado.
-
-### Configuração Inicial (Primeira vez)
-
-```bash
-# Criar ambiente virtual
-python3 -m venv .venv
-
-# Ativar ambiente
-source .venv/bin/activate
-
-# Instalar dependências
-pip install -r requirements.txt
+### Windows PowerShell
+```powershell
+.\run.ps1
 ```
 
-### Executando a Aplicação
+### Windows CMD
+```cmd
+run.bat
+```
 
-Para facilitar, utilize o script incluído:
-
+### Linux / WSL / Git Bash
 ```bash
 ./run.sh
 ```
 
-Ou execute manualmente:
+Os scripts criam o `.venv`, instalam dependências na primeira execução e iniciam o Streamlit.
 
+---
+
+## 📦 Execução Manual
 ```bash
-.venv/bin/streamlit run app.py
+python -m venv .venv
+source .venv/bin/activate  # Linux/WSL/Git Bash
+# ou: .\.venv\Scripts\Activate.ps1  # PowerShell
+python -m pip install -r requirements.txt
+python -m streamlit run app.py
 ```
 
 ---
 
-## 🤝 Créditos e Desenvolvimento
-
-**Desenvolvido por:** Vanderley Nascimento
-
-Este projeto é uma solução proprietária para análise logística, focada em eficiência operacional e visibilidade de dados.
-
----
-*Atualizado em: Fevereiro de 2026*
+## ✅ Testes
+```bash
+python -m pytest -q
+```
 
 ---
 
-## 🔒 Licença e Segurança
+## 📁 Estrutura Principal
+- `app.py`: interface e fluxos das telas.
+- `utils.py`: ingestão, validação, deduplicação e regras de negócio.
+- `config_manager.py`: persistência de configurações.
+- `agency_config.json`: tempos de SLA e agências de transbordo.
 
-> **AVISO LEGAL:** Este software é protegido por leis de direitos autorais e propriedade intelectual.
+---
 
-O uso deste código fonte ou da aplicação compilada está sujeito aos seguintes termos:
+## 🔐 Licença, Consentimento e Uso
 
-1.  **Uso Pessoal/Acadêmico**: Permitido apenas para fins de estudo e demonstração pessoal, desde que mantidos os créditos originais ao autor **Vanderley Nascimento**.
-2.  **Uso Comercial**: É estritamente **PROIBIDO** o uso comercial sem prévio aviso, venda, distribuição ou modificação deste software sem a prévia autorização por escrito do autor ou aquisição de uma licença comercial.
-3.  **Remoção de Créditos**: A remoção ou alteração dos créditos do autor configura violação dos termos de uso.
+> **AVISO LEGAL:** este software é protegido por direitos autorais e propriedade intelectual.
 
-**Para adquirir uma licença comercial ou solicitar permissão de uso:**
-Entre em contato diretamente com o desenvolvedor.
+O uso deste código fonte está sujeito aos termos abaixo:
 
-&copy; 2026 Vanderley Nascimento. Todos os direitos reservados.
+1. **Uso pessoal/estudo**: permitido para aprendizado e demonstração, mantendo os créditos originais.
+2. **Uso comercial**: **proibido** sem autorização prévia e por escrito do proprietário do projeto.
+3. **Distribuição/modificação com fins comerciais**: exige consentimento formal do proprietário.
+4. **Remoção de créditos/autoria**: configura violação dos termos de uso.
+
+Em resumo: este projeto **não pode ser usado comercialmente sem consentimento explícito do dono**.
+
+---
+
+## 🤝 Créditos
+
+**Desenvolvido por:** Vanderley Nascimento  
+**Projeto proprietário** para análise logística e eficiência operacional.
+
+© 2026 Vanderley Nascimento. Todos os direitos reservados.

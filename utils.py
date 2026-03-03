@@ -1,230 +1,315 @@
+import json
+import logging
 import pandas as pd
 import streamlit as st
 
-@st.cache_data
-def load_and_combine_data(uploaded_files):
+logger = logging.getLogger("xddf.utils")
+
+REQUIRED_COLUMNS = ("agência_destino_anotacao",)
+RECOMMENDED_COLUMNS = (
+    "seal",
+    "package_id",
+    "barcode",
+    "promised_date",
+    "contexto_atual",
+)
+
+
+def _safe_mode(series, default_value):
     """
-    Carrega e combina múltiplos arquivos CSV em um único DataFrame via concatenação.
+    Retorna a moda de forma segura, com fallback para valor padrao.
+    """
+    mode_values = series.dropna().mode()
+    if not mode_values.empty:
+        return mode_values.iloc[0]
+    return default_value
+
+
+def _log_event(event, **fields):
+    payload = {"event": event, **fields}
+    logger.info(json.dumps(payload, ensure_ascii=False, default=str))
+
+
+def validate_dataframe_schema(df):
+    """
+    Valida colunas obrigatorias e recomendadas para a aplicacao.
+    """
+    cols = set(df.columns)
+    missing_required = [c for c in REQUIRED_COLUMNS if c not in cols]
+    missing_recommended = [c for c in RECOMMENDED_COLUMNS if c not in cols]
+    return {
+        "is_valid": len(missing_required) == 0,
+        "missing_required": missing_required,
+        "missing_recommended": missing_recommended,
+    }
+
+
+def deduplicate_packages(df):
+    """
+    Remove duplicidades entre arquivos usando package_id e/ou barcode.
+    Prioriza package_id quando disponivel e usa barcode como fallback.
+    """
+    dedup_fields = []
+    if "package_id" in df.columns:
+        dedup_fields.append(("package_id", "pid:"))
+    if "barcode" in df.columns:
+        dedup_fields.append(("barcode", "bar:"))
+
+    if not dedup_fields:
+        return df, {"removed": 0, "strategy": "no_dedup_field"}
+
+    df_work = df.copy()
+    dedup_key = pd.Series(pd.NA, index=df_work.index, dtype="object")
+
+    for field, prefix in dedup_fields:
+        normalized = df_work[field].where(df_work[field].notna(), "").astype(str).str.strip()
+        valid = normalized != ""
+        candidate = prefix + normalized
+        dedup_key = dedup_key.mask(dedup_key.isna() & valid, candidate)
+
+    df_work["_dedup_key"] = dedup_key
+    has_key = df_work["_dedup_key"].notna()
+
+    df_no_key = df_work[~has_key]
+    df_with_key = df_work[has_key].drop_duplicates(subset="_dedup_key", keep="first")
+
+    combined = pd.concat([df_no_key, df_with_key], axis=0).sort_index()
+    removed = len(df_work) - len(combined)
+
+    combined = combined.drop(columns=["_dedup_key"]).reset_index(drop=True)
+    strategy = "+".join([field for field, _ in dedup_fields])
+    return combined, {"removed": int(removed), "strategy": strategy}
+
+
+@st.cache_data
+def load_and_combine_data(uploaded_files, deduplicate=True):
+    """
+    Carrega e combina multiplos CSVs.
     """
     if not uploaded_files:
         return pd.DataFrame()
 
     all_dfs = []
+    read_strategies = [
+        ("utf-8", ","),
+        ("latin1", ","),
+        ("utf-8", ";"),
+        ("latin1", ";"),
+    ]
+
     for file in uploaded_files:
-        try:
-            # Tenta ler com diferentes encodings se utf-8 falhar (comum em arquivos brasileiros)
+        loaded_df = None
+        last_error = None
+        for encoding, sep in read_strategies:
             try:
-                df = pd.read_csv(file, encoding='utf-8', sep=',')
-            except UnicodeDecodeError:
                 file.seek(0)
-                df = pd.read_csv(file, encoding='latin1', sep=',')
-            except pd.errors.ParserError:
-                # Tenta separador de ponto e vírgula se vírgula falhar
-                file.seek(0)
-                df = pd.read_csv(file, encoding='utf-8', sep=';')
-            
-            # Rastrear origem
-            df['source_file'] = file.name
-            all_dfs.append(df)
-        except Exception as e:
-            st.error(f"Erro ao ler o arquivo {file.name}: {e}")
+                loaded_df = pd.read_csv(file, encoding=encoding, sep=sep)
+                _log_event("file_read_ok", file=file.name, encoding=encoding, sep=sep, rows=len(loaded_df))
+                break
+            except Exception as e:
+                last_error = e
+
+        if loaded_df is None:
+            _log_event("file_read_error", file=file.name, error_type=type(last_error).__name__, error=str(last_error))
+            st.error(f"Erro ao ler o arquivo {file.name}: {last_error}")
             continue
+
+        loaded_df["source_file"] = file.name
+        all_dfs.append(loaded_df)
 
     if not all_dfs:
         return pd.DataFrame()
 
     try:
         combined_df = pd.concat(all_dfs, ignore_index=True)
-        return combined_df
     except Exception as e:
+        _log_event("combine_error", error_type=type(e).__name__, error=str(e))
         st.error(f"Erro ao combinar arquivos: {e}")
         return pd.DataFrame()
 
+    if deduplicate:
+        before = len(combined_df)
+        combined_df, dedup_info = deduplicate_packages(combined_df)
+        _log_event(
+            "dedup_summary",
+            before=before,
+            after=len(combined_df),
+            removed=dedup_info["removed"],
+            strategy=dedup_info["strategy"],
+        )
+
+    return combined_df
+
+
 def classify_agency(agency_name, trasbordo_list):
     """
-    Classifica uma agência como 'Transbordo' ou 'Processos XDDF' baseada na lista fornecida.
+    Classifica uma agencia como Transbordo ou Processo.
     """
     if agency_name in trasbordo_list:
         return "Transbordo"
     return "Processo"
 
+
 @st.cache_data
 def process_data(df, trasbordo_list):
     """
-    Aplica a classificação de agências ao DataFrame e garante tipos corretos.
-    Também extrai informações de veículos (Tipo e Identificador) do contexto.
+    Aplica classificacao de agencias, trata tipos e extrai dados de veiculo.
     """
     if df.empty:
         return df
-    
+
     df_processed = df.copy()
-    
-    # Normalização da coluna de agência
-    col_agencia = 'agência_destino_anotacao'
+    col_agencia = "agência_destino_anotacao"
+
     if col_agencia in df_processed.columns:
-        df_processed[col_agencia] = df_processed[col_agencia].fillna('N/A').astype(str)
-        
-        df_processed['Categoria'] = df_processed[col_agencia].apply(
-            lambda x: classify_agency(x, trasbordo_list)
+        agency_col = df_processed[col_agencia].fillna("N/A").astype(str)
+        df_processed[col_agencia] = agency_col
+        trasbordo_set = set(trasbordo_list)
+        df_processed["Categoria"] = agency_col.map(
+            lambda value: "Transbordo" if value in trasbordo_set else "Processo"
         )
-    
-    # Extração Global de Veículos (Novidade)
-    if 'contexto_atual' in df_processed.columns:
-        # Aplica a função e expande o resultado (tupla) em duas colunas
-        vehicle_data = df_processed['contexto_atual'].apply(parse_vehicle_info)
-        # Cria as colunas a partir da lista de tuplas
-        df_processed['Tipo_Veiculo'] = [x[0] for x in vehicle_data]
-        df_processed['Identificador'] = [x[1] for x in vehicle_data]
+
+    if "contexto_atual" in df_processed.columns:
+        vehicle_data = df_processed["contexto_atual"].apply(parse_vehicle_info)
+        df_processed["Tipo_Veiculo"] = [x[0] for x in vehicle_data]
+        df_processed["Identificador"] = [x[1] for x in vehicle_data]
     else:
-        df_processed['Tipo_Veiculo'] = "Indefinido"
-        df_processed['Identificador'] = "-"
+        df_processed["Tipo_Veiculo"] = "Indefinido"
+        df_processed["Identificador"] = "-"
 
-    # Tratamento de datas (se existirem)
-    if 'promised_date' in df_processed.columns:
-        df_processed['promised_date'] = pd.to_datetime(df_processed['promised_date'], errors='coerce', dayfirst=True)
-        
-        # Lógica de Prazos (SLA)
+    if "promised_date" in df_processed.columns:
+        promised = pd.to_datetime(df_processed["promised_date"], errors="coerce", dayfirst=True)
+        df_processed["promised_date"] = promised
+
         hoje = pd.Timestamp.now().normalize()
-        
-        def definir_status_prazo(row):
-            if pd.isnull(row['promised_date']):
-                return "Sem Data"
-            
-            delta = (row['promised_date'] - hoje).days
-            
-            if delta < 0:
-                return "Atrasado"
-            elif delta == 0:
-                return "Vence Hoje"
-            else:
-                return "No Prazo"
+        delta = (promised.dt.normalize() - hoje).dt.days
 
-        df_processed['Status_Prazo'] = df_processed.apply(definir_status_prazo, axis=1)
+        status = pd.Series("No Prazo", index=df_processed.index, dtype="object")
+        status = status.mask(promised.isna(), "Sem Data")
+        status = status.mask(delta < 0, "Atrasado")
+        status = status.mask(delta == 0, "Vence Hoje")
+        status = status.mask(delta == 1, "Atenção")
+
+        df_processed["Status_Prazo"] = status
 
     return df_processed
+
 
 @st.cache_data
 def parse_vehicle_info(context_str):
     """
-    Extrai informações de veículo/origem do contexto atual.
+    Extrai informacoes de veiculo/origem do contexto atual.
     Retorna uma tupla (Tipo, Identificador).
     """
     if pd.isna(context_str):
         return "Indefinido", "-"
-    
+
     context_str = str(context_str).strip()
-    
-    # Caso AGP (XDDF COL)
+
     if "XDDF COL" in context_str:
         return "Agência AGP", context_str
-        
-    # Caso TRUCK
+
     if context_str.startswith("TRUCK"):
         parts = context_str.split()
-        # Esperado: ["TRUCK", "PLACA", "TRANSFERENCIA"]
         if len(parts) >= 2:
-            return "Caminhão", parts[1] # Retorna a Placa
-            
+            return "Caminhão", parts[1]
+
     return "Outro", context_str
+
 
 @st.cache_data
 def group_data_by_seal(df):
     """
-    Agrupa os dados por Seal (Lacre), consolidando informações.
-    Agora aproveita as colunas Tipo_Veiculo e Identificador já processadas.
+    Agrupa por seal de forma robusta mesmo com colunas opcionais ausentes.
     """
-    if 'seal' not in df.columns:
+    if "seal" not in df.columns or df.empty:
         return pd.DataFrame()
 
-    # Agrupamento
-    # Define dicionário de agregação dinamicamente para evitar erros se colunas não existirem
-    agg_dict = {
-        'package_id': 'count',
-        'agência_destino_anotacao': lambda x: x.mode()[0] if not x.mode().empty else "Indefinido",
-        'contexto_atual': lambda x: x.mode()[0] if not x.mode().empty else pd.NA,
-        'promised_date': 'min' # Data mais crítica (menor)
+    df_grouped = df.groupby("seal").size().reset_index(name="Qtd_Pacotes")
+
+    mode_defaults = {
+        "agência_destino_anotacao": "Indefinido",
+        "contexto_atual": pd.NA,
+        "Tipo_Veiculo": "Indefinido",
+        "Identificador": "-",
     }
 
-    # Se as colunas de veículo já existirem (process_data foi chamado), usa elas
-    if 'Tipo_Veiculo' in df.columns:
-        agg_dict['Tipo_Veiculo'] = lambda x: x.mode()[0] if not x.mode().empty else "Indefinido"
-    if 'Identificador' in df.columns:
-        agg_dict['Identificador'] = lambda x: x.mode()[0] if not x.mode().empty else "-"
+    for col_name, default_value in mode_defaults.items():
+        if col_name in df.columns:
+            df_mode = (
+                df.groupby("seal")[col_name]
+                .agg(lambda x: _safe_mode(x, default_value))
+                .reset_index(name=col_name)
+            )
+            df_grouped = df_grouped.merge(df_mode, on="seal", how="left")
 
-    df_grouped = df.groupby('seal').agg(agg_dict).reset_index()
-    
-    df_grouped.rename(columns={'package_id': 'Qtd_Pacotes', 'promised_date': 'Data_Promessa_Min'}, inplace=True)
-    
-    # A extração agora é feita no process_data, então não precisamos refazer aqui
-    # Apenas garantimos que as colunas existam (mecanismo de fallback caso usem função isolada)
-    if 'Tipo_Veiculo' not in df_grouped.columns:
-         extra_info = df_grouped['contexto_atual'].apply(parse_vehicle_info)
-         df_grouped['Tipo_Veiculo'] = [x[0] for x in extra_info]
-         df_grouped['Identificador'] = [x[1] for x in extra_info]
-    
+    if "promised_date" in df.columns:
+        date_series = pd.to_datetime(df["promised_date"], errors="coerce", dayfirst=True)
+        df_dates = date_series.groupby(df["seal"]).min().reset_index(name="Data_Promessa_Min")
+        df_grouped = df_grouped.merge(df_dates, on="seal", how="left")
+    else:
+        df_grouped["Data_Promessa_Min"] = pd.NaT
+
+    if "Tipo_Veiculo" not in df_grouped.columns:
+        if "contexto_atual" in df_grouped.columns:
+            extra_info = df_grouped["contexto_atual"].apply(parse_vehicle_info)
+        else:
+            extra_info = pd.Series([("Indefinido", "-")] * len(df_grouped))
+
+        df_grouped["Tipo_Veiculo"] = [x[0] for x in extra_info]
+        df_grouped["Identificador"] = [x[1] for x in extra_info]
+
     return df_grouped
+
 
 def get_unique_agencies(df):
     """
-    Retorna uma lista ordenada e única de agências, garantindo que sejam strings.
+    Retorna lista ordenada de agencias unicas.
     """
-    if df.empty or 'agência_destino_anotacao' not in df.columns:
+    if df.empty or "agência_destino_anotacao" not in df.columns:
         return []
-    
-    # Converte para string e trata nulos ANTES de ordenar
-    return sorted(df['agência_destino_anotacao'].fillna('N/A').astype(str).unique())
+    return sorted(df["agência_destino_anotacao"].fillna("N/A").astype(str).unique())
+
 
 @st.cache_data
 def calculate_slo(df, config_dict):
     """
-    Calcula a Data Limite de Expedição (SLO) baseada na configuração de cada agência.
-    Fórmula: Data Promessa - 1 (Buffer) - Tempo Agência - Tempo Trânsito
+    Calcula data limite de expedicao (SLO):
+    Data Promessa - 1 (Buffer) - Tempo Agencia - Tempo Transito.
     """
-    if df.empty or 'promised_date' not in df.columns:
+    if df.empty or "promised_date" not in df.columns:
         return df
 
     df_calc = df.copy()
-    
-    # Normalizar datas
-    df_calc['promised_date'] = pd.to_datetime(df_calc['promised_date'], errors='coerce')
-    
-    def get_slo(row):
-        agency = str(row.get('agência_destino_anotacao', ''))
-        
-        # Pega config ou padrão (0 dias)
-        cfg = config_dict.get(agency, {"transit_time": 0, "agency_time": 0})
-        
-        transit = cfg.get("transit_time", 0)
-        agency_time = cfg.get("agency_time", 0)
-        buffer = 1 # 1 dia de folga padrão pedido pelo usuário
-        
-        total_offset = transit + agency_time + buffer
-        
-        if pd.isnull(row['promised_date']):
-            return pd.NaT
-            
-        return row['promised_date'] - pd.Timedelta(days=total_offset)
+    promised = pd.to_datetime(df_calc["promised_date"], errors="coerce", dayfirst=True)
+    df_calc["promised_date"] = promised
 
-    df_calc['Data_Limite_Expedicao'] = df_calc.apply(get_slo, axis=1)
-    
-    # Status de Expedição
+    if "agência_destino_anotacao" in df_calc.columns:
+        agencies = df_calc["agência_destino_anotacao"].fillna("").astype(str)
+    else:
+        agencies = pd.Series("", index=df_calc.index, dtype="object")
+
+    transit_map = {}
+    agency_map = {}
+    for agency_name, cfg in config_dict.items():
+        if isinstance(cfg, dict):
+            transit_map[str(agency_name)] = int(cfg.get("transit_time", 0))
+            agency_map[str(agency_name)] = int(cfg.get("agency_time", 0))
+
+    transit_days = agencies.map(transit_map).fillna(0).astype(int)
+    agency_days = agencies.map(agency_map).fillna(0).astype(int)
+    total_offset = transit_days + agency_days + 1
+
+    df_calc["Data_Limite_Expedicao"] = promised - pd.to_timedelta(total_offset, unit="D")
+
     hoje = pd.Timestamp.now().normalize()
-    
-    def status_expedicao(row):
-        if pd.isnull(row['Data_Limite_Expedicao']):
-            return "Sem Data"
-        
-        delta = (row['Data_Limite_Expedicao'] - hoje).days
-        
-        if delta < 0:
-            return "Atrasado (Crítico)"
-        elif delta == 0:
-            return "Expedir Hoje"
-        elif delta <= 1:
-            return "Atenção"
-        else:
-            return "No Prazo"
-            
-    df_calc['Status_Expedicao'] = df_calc.apply(status_expedicao, axis=1)
-    
+    delta = (df_calc["Data_Limite_Expedicao"].dt.normalize() - hoje).dt.days
+
+    status = pd.Series("No Prazo", index=df_calc.index, dtype="object")
+    status = status.mask(df_calc["Data_Limite_Expedicao"].isna(), "Sem Data")
+    status = status.mask(delta < 0, "Atrasado (Crítico)")
+    status = status.mask(delta == 0, "Expedir Hoje")
+    status = status.mask((delta > 0) & (delta <= 1), "Atenção")
+
+    df_calc["Status_Expedicao"] = status
     return df_calc

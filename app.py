@@ -1,10 +1,17 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import logging
 import utils
 import config_manager
 from streamlit_option_menu import option_menu
 from datetime import datetime
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+)
+logger = logging.getLogger("xddf.app")
 
 # Configuração da página
 st.set_page_config(
@@ -153,19 +160,18 @@ def inject_custom_css():
     """, unsafe_allow_html=True)
 
 def main():
-    # Injetar CSS fixo e profissional
     inject_custom_css()
 
     with st.sidebar:
         page = option_menu(
-            "Navegação", 
-            ["Dashboard Geral", "Detalhamento e KPIs", "Gestão de Lacres", "Gestão de SLA"],
+            "Navegacao",
+            ["Dashboard Geral", "Detalhamento e KPIs", "Gestao de Lacres", "Gestao de SLA"],
             icons=['speedometer2', 'bar-chart-line', 'box-seam', 'exclamation-triangle'],
-            menu_icon="compass", 
+            menu_icon="compass",
             default_index=0,
             styles={
                 "container": {"padding": "0 !important", "background-color": "#0d1b2a", "border-radius": "0 !important"},
-                "icon": {"color": "#0084FF", "font-size": "18px"}, 
+                "icon": {"color": "#0084FF", "font-size": "18px"},
                 "nav-link": {"font-size": "16px", "text-align": "left", "margin": "0px", "--hover-color": "#1c2e40", "color": "#e0e0e0", "border-radius": "0px"},
                 "nav-link-selected": {"background-color": "#0084FF", "font-weight": "600", "color": "#ffffff", "border-radius": "0px"},
                 "menu-title": {"color": "#ffffff", "font-weight": "700", "font-size": "1.2rem", "margin-bottom": "0.5rem"},
@@ -173,58 +179,74 @@ def main():
         )
     st.sidebar.markdown("---")
 
-    # Upload global (acessível em ambas as páginas)
     st.sidebar.header("Carregar Dados", divider="gray")
+    deduplicate_data = st.sidebar.checkbox(
+        "Deduplicar pacotes automaticamente",
+        value=True,
+        help="Remove duplicidade entre arquivos usando package_id e barcode."
+    )
     uploaded_files = st.sidebar.file_uploader(
-        "Arquivos CSV", 
-        type=["csv"], 
+        "Arquivos CSV",
+        type=["csv"],
         accept_multiple_files=True,
         help="Carregue um ou mais arquivos de remessa."
     )
 
-    if uploaded_files:
-        # Carregamento
-        df = utils.load_and_combine_data(uploaded_files)
-        
-        if not df.empty:
-            # Validação básica
-            if 'agência_destino_anotacao' not in df.columns:
-                 st.error("Erro: Coluna 'agência_destino_anotacao' não encontrada.")
-                 return
-
-            # Configuração de Transbordo (Global)
-            todas_agencias = utils.get_unique_agencies(df)
-            
-            with st.sidebar.expander("Configurar Transbordo", expanded=False, icon=":material/settings:"):
-                lista_trasbordo = st.multiselect(
-                    "Agências de Transbordo:",
-                    options=todas_agencias,
-                    default=[] 
-                )
-            
-            # Processamento
-            df_processed = utils.process_data(df, lista_trasbordo)
-
-            # Roteamento de páginas
-            if page == "Dashboard Geral":
-                render_dashboard_geral(df_processed)
-            elif page == "Detalhamento e KPIs":
-                render_detalhamento_kpis(df_processed)
-            elif page == "Gestão de Lacres":
-                render_gestao_lacres(df_processed)
-            elif page == "Gestão de SLA":
-                render_sla_expedicao(df_processed)
-        
-        else:
-            st.warning("Nenhum dado válido encontrado nos arquivos.")
-    else:
+    if not uploaded_files:
         render_home()
+        return
+
+    df = utils.load_and_combine_data(uploaded_files, deduplicate=deduplicate_data)
+    if df.empty:
+        st.warning("Nenhum dado valido encontrado nos arquivos.")
+        return
+
+    schema_report = utils.validate_dataframe_schema(df)
+    if not schema_report["is_valid"]:
+        missing_required = ", ".join(schema_report["missing_required"])
+        st.error(f"Erro de schema: colunas obrigatorias ausentes: {missing_required}")
+        logger.error("schema_validation_failed missing_required=%s", schema_report["missing_required"])
+        return
+
+    if schema_report["missing_recommended"]:
+        missing_recommended = ", ".join(schema_report["missing_recommended"])
+        st.warning(
+            f"Colunas recomendadas ausentes: {missing_recommended}. Algumas visoes podem ficar limitadas."
+        )
+        logger.warning("schema_missing_recommended missing=%s", schema_report["missing_recommended"])
+
+    todas_agencias = utils.get_unique_agencies(df)
+    persisted_trasbordo = [
+        agency for agency in config_manager.load_transbordo_agencies()
+        if agency in todas_agencias
+    ]
+    with st.sidebar.expander("Configurar Transbordo", expanded=False, icon=":material/settings:"):
+        lista_trasbordo = st.multiselect(
+            "Agencias de Transbordo:",
+            options=todas_agencias,
+            default=persisted_trasbordo
+        )
+
+    if set(lista_trasbordo) != set(persisted_trasbordo):
+        config_manager.save_transbordo_agencies(lista_trasbordo)
+        logger.info("transbordo_saved count=%s", len(lista_trasbordo))
+
+    df_processed = utils.process_data(df, lista_trasbordo)
+
+    if page == "Dashboard Geral":
+        render_dashboard_geral(df_processed)
+    elif page == "Detalhamento e KPIs":
+        render_detalhamento_kpis(df_processed)
+    elif page in ["Gestao de Lacres", "Gestão de Lacres"]:
+        render_gestao_lacres(df_processed)
+    elif page in ["Gestao de SLA", "Gestão de SLA"]:
+        render_sla_expedicao(df_processed)
 
 # ... (Existing functions)
 
 def render_gestao_lacres(df):
-    st.title("Gestão de Lacres", anchor=False)
-    st.markdown("#### :material/package_2: Visão agrupada por Lacres, vinculando agências e veículos.")
+    st.title("Gestao de Lacres", anchor=False)
+    st.markdown("#### :material/package_2: Visao agrupada por Lacres, vinculando agencias e veiculos.")
     st.markdown("---")
     
     if 'seal' not in df.columns:
@@ -247,7 +269,7 @@ def render_gestao_lacres(df):
         with st.form(key='search_form', clear_on_submit=False, border=False):
             search_package_input = st.text_input("Buscar Pacote/Barcode", placeholder="Digite ID + Enter")
             # Botão de busca explícito para melhorar UX
-            submitted = st.form_submit_button("🔍 Buscar Pacote", use_container_width=True)
+            submitted = st.form_submit_button("Buscar Pacote", use_container_width=True)
             
         # O valor é atualizado quando submete ou quando aperta enter dentro do form
         search_package = search_package_input
@@ -376,9 +398,14 @@ def render_gestao_lacres(df):
             # Filtrar pacotes originais deste seal
             pacotes_do_seal = df[df['seal'] == seal_selecionado].copy()
             
-            # Mostrar colunas solicitadas
+            # Mostrar apenas colunas disponiveis para evitar quebra com CSVs incompletos
             cols_detalhe = ['barcode', 'nfe_key', 'company_name', 'promised_date', 'package_id', 'Status']
-            df_display = pacotes_do_seal[cols_detalhe]
+            cols_detalhe_existentes = [c for c in cols_detalhe if c in pacotes_do_seal.columns]
+            if not cols_detalhe_existentes:
+                st.info("Nenhuma coluna de detalhe disponivel para este lacre.")
+                return
+
+            df_display = pacotes_do_seal[cols_detalhe_existentes]
             
             # Função para destacar linhas encontradas
             def highlight_matches(row):
@@ -386,8 +413,10 @@ def render_gestao_lacres(df):
                 if not matches:
                     return [''] * len(row)
                 
-                pid = str(row['package_id']) if pd.notna(row['package_id']) else ''
-                barcode = str(row['barcode']) if pd.notna(row['barcode']) else ''
+                pid_value = row.get('package_id', '')
+                barcode_value = row.get('barcode', '')
+                pid = str(pid_value) if pd.notna(pid_value) else ''
+                barcode = str(barcode_value) if pd.notna(barcode_value) else ''
                 
                 # Verifica se o ID ou Barcode está na lista de encontrados
                 if pid in matches or barcode in matches:
@@ -395,12 +424,14 @@ def render_gestao_lacres(df):
                     return ['background-color: #ffeb3b; color: black; font-weight: bold'] * len(row)
                 return [''] * len(row)
 
+            column_config_detalhe = {}
+            if 'promised_date' in cols_detalhe_existentes:
+                column_config_detalhe["promised_date"] = st.column_config.DateColumn("Prazo", format="DD/MM/YYYY")
+
             st.dataframe(
                 df_display.style.apply(highlight_matches, axis=1),
                 use_container_width=True,
-                column_config={
-                    "promised_date": st.column_config.DateColumn("Prazo", format="DD/MM/YYYY")
-                }
+                column_config=column_config_detalhe
             )
             
             if st.button("Fechar Detalhes", key="btn_close_lacres", icon=":material/close:"):
@@ -426,7 +457,7 @@ def render_home():
         
     with c2:
         st.markdown("### :material/settings: 2. Configure")
-        st.info("Defina quais agências são de Transbordo e ajuste os tempos de trânsito (SLA).")
+        st.info("Defina quais agencias sao de Transbordo e ajuste os tempos de transito (SLA).")
         
     with c3:
         st.markdown("### :material/analytics: 3. Analise")
@@ -437,17 +468,17 @@ def render_home():
     st.subheader(":material/rocket_launch: Funcionalidades Principais")
     row1 = st.columns(2)
     row1[0].markdown("""
-    **Gestão de Lacres**
+    **Gestao de Lacres**
     - Agrupamento inteligente por Seal.
-    - Identificação de veículos e placas.
+    - Identificacao de veiculos e placas.
     - Drill-down para ver pacotes individuais.
     """)
     
     row1[1].markdown("""
-    **Controle de SLA & Expedição**
-    - Cálculo automático de data limite de saída.
-    - Monitoramento de risco (Crítico, Atenção).
-    - Configuração persistente por agência.
+    **Controle de SLA & Expedicao**
+    - Calculo automatico de data limite de saida.
+    - Monitoramento de risco (Critico, Atencao).
+    - Configuracao persistente por agencia.
     """)
 
 def render_dashboard_geral(df):
@@ -725,152 +756,335 @@ def render_dashboard_geral(df):
 def render_detalhamento_kpis(df):
     st.title("Detalhamento e KPIs", anchor=False)
     st.markdown("#### :material/analytics: Análise Tática e Saúde Operacional")
-    
+
     if df.empty:
         st.warning("Sem dados para analisar.")
         return
 
-    # --- 1. Filtros Globais (Barra Superior) ---
+    AGENCY_COL_PREF = "agência_destino_anotacao"
+    AGENCY_COL_FALLBACK = "agencia_destino_anotacao"
+
+    STATUS_SEM_DATA = "Sem Data"
+    STATUS_ATRASADO = "Atrasado"
+    STATUS_VENCE_HOJE = "Vence Hoje"
+    STATUS_ATENCAO = "Atenção"
+    STATUS_NO_PRAZO = "No Prazo"
+
+    def get_agency_col(columns):
+        if AGENCY_COL_PREF in columns:
+            return AGENCY_COL_PREF
+        if AGENCY_COL_FALLBACK in columns:
+            return AGENCY_COL_FALLBACK
+        return None
+
+    agency_col = get_agency_col(df.columns)
+
+    def ensure_status_prazo(df_input):
+        if 'Status_Prazo' in df_input.columns:
+            return df_input
+        if 'promised_date' not in df_input.columns:
+            return df_input
+
+        df_out = df_input.copy()
+        promised = pd.to_datetime(df_out['promised_date'], errors='coerce', dayfirst=True)
+        hoje = pd.Timestamp.now().normalize()
+        delta = (promised.dt.normalize() - hoje).dt.days
+
+        status = pd.Series(STATUS_NO_PRAZO, index=df_out.index, dtype='object')
+        status = status.mask(promised.isna(), STATUS_SEM_DATA)
+        status = status.mask(delta < 0, STATUS_ATRASADO)
+        status = status.mask(delta == 0, STATUS_VENCE_HOJE)
+        status = status.mask(delta == 1, STATUS_ATENCAO)
+
+        df_out['Status_Prazo'] = status
+        return df_out
+
+    def semaforo_pct(value, green_max, yellow_max, orange_max):
+        if value <= green_max:
+            return 'green'
+        if value <= yellow_max:
+            return 'yellow'
+        if value <= orange_max:
+            return 'orange'
+        return 'red'
+
+    def semaforo_score(value):
+        if value >= 90:
+            return 'green'
+        if value >= 80:
+            return 'yellow'
+        if value >= 70:
+            return 'orange'
+        return 'red'
+
+    def color_for(level):
+        colors = {
+            'green': '#16A34A',
+            'yellow': '#EAB308',
+            'orange': '#F97316',
+            'red': '#DC2626',
+            'gray': '#64748B',
+        }
+        return colors.get(level, colors['gray'])
+
+    def render_kpi_card(container, title, value, subtitle, level):
+        color = color_for(level)
+        container.markdown(
+            f"""
+            <div style="border:1px solid #e5e7eb; border-left:6px solid {color}; border-radius:12px; padding:14px 16px; min-height:132px; background:#ffffff08;">
+                <div style="font-size:14px; opacity:0.85; margin-bottom:8px;">{title}</div>
+                <div style="font-size:42px; font-weight:700; line-height:1.0; margin-bottom:8px;">{value}</div>
+                <div style="font-size:14px; color:{color}; font-weight:600;">{subtitle}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     with st.container():
         c1, c2, c3 = st.columns(3)
+
         with c1:
-            # Safely get unique agencies
-            agencias = sorted(df['agência_destino_anotacao'].fillna("N/A").astype(str).unique()) if 'agência_destino_anotacao' in df.columns else []
+            if agency_col:
+                agencias = sorted(df[agency_col].fillna('N/A').astype(str).unique())
+            else:
+                agencias = []
             filtro_agencia = st.multiselect("Filtrar Agências", options=agencias)
+
         with c2:
             filtro_status = st.multiselect(
                 "Filtrar Status Prazo",
-                options=["No Prazo", "Atenção", "Atrasado", "Vence Hoje"],
-                default=["Atrasado", "Vence Hoje"] # Default focado em problema
+                options=[STATUS_NO_PRAZO, STATUS_ATENCAO, STATUS_ATRASADO, STATUS_VENCE_HOJE],
+                default=[STATUS_ATRASADO, STATUS_VENCE_HOJE],
             )
+
         with c3:
-            # Filtro Data Prometida
             if 'promised_date' in df.columns:
-                min_d = pd.to_datetime(df['promised_date']).min()
-                max_d = pd.to_datetime(df['promised_date']).max()
+                promised_all = pd.to_datetime(df['promised_date'], errors='coerce', dayfirst=True)
+                min_d = promised_all.min()
+                max_d = promised_all.max()
                 if pd.notna(min_d) and pd.notna(max_d):
-                    date_range = st.date_input("Período (Data Promessa)", value=(min_d, max_d))
+                    date_range = st.date_input("Período (Data Promessa)", value=(min_d.date(), max_d.date()))
                 else:
                     date_range = None
             else:
                 date_range = None
 
-    # Aplicação dos Filtros
-    df_view = df.copy()
-    if filtro_agencia:
-        df_view = df_view[df_view['agência_destino_anotacao'].isin(filtro_agencia)]
-    
-    # Processar Status se não existir (garantia)
-    if 'Status_Prazo' not in df_view.columns and 'promised_date' in df_view.columns:
-        hoje = pd.Timestamp.now().normalize()
-        def calc_status(d):
-            if pd.isna(d): return "Sem Data"
-            delta = (pd.to_datetime(d) - hoje).days
-            if delta < 0: return "Atrasado"
-            if delta == 0: return "Vence Hoje"
-            return "No Prazo"
-            
-        df_view['Status_Prazo'] = df_view['promised_date'].apply(calc_status)
+    df_base = df.copy()
 
+    if filtro_agencia and agency_col:
+        df_base = df_base[df_base[agency_col].isin(filtro_agencia)]
+
+    if date_range and len(date_range) == 2 and 'promised_date' in df_base.columns:
+        promised_base = pd.to_datetime(df_base['promised_date'], errors='coerce', dayfirst=True)
+        df_base = df_base[
+            (promised_base.dt.date >= date_range[0]) &
+            (promised_base.dt.date <= date_range[1])
+        ]
+
+    df_base = ensure_status_prazo(df_base)
+
+    df_view = df_base.copy()
     if filtro_status and 'Status_Prazo' in df_view.columns:
         df_view = df_view[df_view['Status_Prazo'].isin(filtro_status)]
 
-    if date_range and len(date_range) == 2 and 'promised_date' in df_view.columns:
-        df_view = df_view[
-            (pd.to_datetime(df_view['promised_date']).dt.date >= date_range[0]) & 
-            (pd.to_datetime(df_view['promised_date']).dt.date <= date_range[1])
-        ]
-
+    st.caption("Base KPI: Completa (agências + período). O filtro de status afeta gráficos e tabela.")
     st.markdown("---")
 
-    # --- 2. KPI Cards (Health Check) ---
-    total_view = len(df_view)
-    if total_view > 0:
-        atrasados = len(df_view[df_view['Status_Prazo'] == 'Atrasado']) if 'Status_Prazo' in df_view.columns else 0
-        taxa_atraso = (atrasados / total_view) * 100
-        
-        kriticos_abs = len(df_view[df_view['Status_Prazo'].isin(['Atrasado', 'Vence Hoje'])]) if 'Status_Prazo' in df_view.columns else 0
+    total_base = len(df_base)
+    if total_base > 0 and 'Status_Prazo' in df_base.columns:
+        count_status = df_base['Status_Prazo'].value_counts()
+        atrasados = int(count_status.get(STATUS_ATRASADO, 0))
+        vence_hoje = int(count_status.get(STATUS_VENCE_HOJE, 0))
+        atencao = int(count_status.get(STATUS_ATENCAO, 0))
+        no_prazo = int(count_status.get(STATUS_NO_PRAZO, 0))
 
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Volume Selecionado", total_view, border=True)
-        k2.metric("Backlog Crítico", kriticos_abs, delta="Atenção Imediata", delta_color="inverse", border=True)
-        k3.metric("Taxa de Atraso", f"{taxa_atraso:.1f}%", border=True)
-        
-        # Eficiência (Inverso do Atraso)
-        k4.metric("Eficiência de Prazo", f"{100-taxa_atraso:.1f}%", border=True)
+        backlog_critico = atrasados + vence_hoje
 
-    # --- 3. Gráficos Estratégicos ---
+        taxa_atraso = (atrasados / total_base) * 100
+        pct_vence_hoje = (vence_hoje / total_base) * 100
+        pct_atencao = (atencao / total_base) * 100
+        eficiencia = max(0.0, 100 - taxa_atraso)
+
+        score_sla = max(0.0, min(100.0, 100 - (1.2 * taxa_atraso + 0.8 * pct_vence_hoje + 0.4 * pct_atencao)))
+
+        hoje = pd.Timestamp.now().normalize()
+        dias_medio_atraso = 0.0
+        if atrasados > 0 and 'promised_date' in df_base.columns:
+            promised_atraso = pd.to_datetime(
+                df_base.loc[df_base['Status_Prazo'] == STATUS_ATRASADO, 'promised_date'],
+                errors='coerce',
+                dayfirst=True,
+            ).dt.normalize()
+            delta_atraso = (hoje - promised_atraso).dt.days
+            delta_atraso = delta_atraso[delta_atraso >= 0]
+            if not delta_atraso.empty:
+                dias_medio_atraso = float(delta_atraso.mean())
+
+        backlog_pct = (backlog_critico / total_base) * 100
+
+        level_backlog = semaforo_pct(backlog_pct, 8, 15, 25)
+        level_taxa_atraso = semaforo_pct(taxa_atraso, 2, 5, 10)
+        level_eficiencia = 'green' if eficiencia >= 98 else ('yellow' if eficiencia >= 95 else ('orange' if eficiencia >= 90 else 'red'))
+        level_score = semaforo_score(score_sla)
+        level_vence_hoje = semaforo_pct(pct_vence_hoje, 5, 10, 20)
+        level_atencao = semaforo_pct(pct_atencao, 10, 20, 35)
+        level_dias_atraso = 'green' if dias_medio_atraso <= 0.2 else ('yellow' if dias_medio_atraso <= 1 else ('orange' if dias_medio_atraso <= 2 else 'red'))
+        level_volume = 'gray'
+
+        if agency_col and backlog_critico > 0:
+            top_impacto = (
+                df_base[df_base['Status_Prazo'].isin([STATUS_ATRASADO, STATUS_VENCE_HOJE])][agency_col]
+                .value_counts()
+                .head(3)
+            )
+            impacto_texto = ' | '.join([f"{ag}: {vol}" for ag, vol in top_impacto.items()])
+            impacto_concentracao = (top_impacto.sum() / backlog_critico) * 100 if backlog_critico else 0.0
+        else:
+            impacto_texto = 'Sem concentracao relevante'
+            impacto_concentracao = 0.0
+
+        if score_sla < 70 or taxa_atraso > 10:
+            estado_operacao = 'CRITICO'
+            nivel_estado = 'red'
+        elif score_sla < 80 or taxa_atraso > 5 or pct_vence_hoje > 10:
+            estado_operacao = 'ALERTA'
+            nivel_estado = 'orange'
+        elif score_sla < 90 or taxa_atraso > 2:
+            estado_operacao = 'ATENCAO'
+            nivel_estado = 'yellow'
+        else:
+            estado_operacao = 'SAUDAVEL'
+            nivel_estado = 'green'
+
+        st.markdown(
+            f"**Estado da Operacao:** <span style='color:{color_for(nivel_estado)}; font-weight:700;'>{estado_operacao}</span> | "
+            f"Score SLA: **{score_sla:.1f}** | Top impacto: {impacto_texto}",
+            unsafe_allow_html=True,
+        )
+
+        r1c1, r1c2, r1c3, r1c4 = st.columns(4)
+        render_kpi_card(r1c1, 'Volume Base', f"{total_base:,}".replace(',', '.'), 'Pacotes no periodo', level_volume)
+        render_kpi_card(r1c2, 'Backlog Critico', f"{backlog_critico:,}".replace(',', '.'), f"{backlog_pct:.1f}% da base", level_backlog)
+        render_kpi_card(r1c3, 'Taxa de Atraso', f"{taxa_atraso:.1f}%", f"Atrasados: {atrasados:,}".replace(',', '.'), level_taxa_atraso)
+        render_kpi_card(r1c4, 'Eficiencia de Prazo', f"{eficiencia:.1f}%", f"No prazo: {no_prazo:,}".replace(',', '.'), level_eficiencia)
+
+        r2c1, r2c2, r2c3, r2c4 = st.columns(4)
+        render_kpi_card(r2c1, '% Vence Hoje', f"{pct_vence_hoje:.1f}%", f"Pacotes: {vence_hoje:,}".replace(',', '.'), level_vence_hoje)
+        render_kpi_card(r2c2, '% Atencao', f"{pct_atencao:.1f}%", f"Pacotes: {atencao:,}".replace(',', '.'), level_atencao)
+        render_kpi_card(r2c3, 'Dias Medios de Atraso', f"{dias_medio_atraso:.1f}", 'Gravidade do backlog', level_dias_atraso)
+        render_kpi_card(r2c4, 'Score SLA', f"{score_sla:.1f}", f"Concentracao Top 3: {impacto_concentracao:.1f}%", level_score)
+
+    else:
+        st.info('Sem base suficiente para calcular KPIs.')
+
+    st.markdown('---')
+
     g1, g2 = st.columns([1, 1])
 
-    # Gráfico 1: Pareto de Atrasos (Top 10 Agências)
     with g1:
-        st.subheader(":material/bar_chart: Top 10 Gargalos (Pareto)")
+        st.subheader(':material/bar_chart: Top 10 Gargalos (Pareto)')
         if 'Status_Prazo' in df_view.columns and not df_view.empty:
-            df_atraso = df_view[df_view['Status_Prazo'] == 'Atrasado']
-            if not df_atraso.empty:
-                pareto = df_atraso['agência_destino_anotacao'].value_counts().reset_index()
-                pareto.columns = ['Agência', 'Volume Atrasado']
+            df_atraso = df_view[df_view['Status_Prazo'] == STATUS_ATRASADO]
+            if not df_atraso.empty and agency_col:
+                pareto = df_atraso[agency_col].value_counts().reset_index()
+                pareto.columns = ['Agencia', 'Volume Atrasado']
                 pareto = pareto.head(10)
-                
+
                 fig_pareto = px.bar(
-                    pareto, 
-                    x='Volume Atrasado', 
-                    y='Agência', 
+                    pareto,
+                    x='Volume Atrasado',
+                    y='Agencia',
                     orientation='h',
                     text='Volume Atrasado',
                     color='Volume Atrasado',
                     color_continuous_scale='Reds'
                 )
-                fig_pareto.update_layout(yaxis=dict(autorange="reversed")) # Top 1 em cima
+                fig_pareto.update_layout(yaxis=dict(autorange='reversed'))
                 st.plotly_chart(fig_pareto, use_container_width=True)
             else:
-                st.success("Nenhum atraso registrado na seleção atual! 🏆")
+                st.success('Nenhum atraso registrado na selecao atual.')
         else:
-            st.info("Sem dados de status para gerar Pareto.")
+            st.info('Sem dados de status para gerar Pareto.')
 
-    # Gráfico 2: Curva de Vencimento (Temporal)
     with g2:
-        st.subheader(":material/show_chart: Curva de Vencimento")
+        st.subheader(':material/show_chart: Curva de Vencimento')
         if 'promised_date' in df_view.columns and not df_view.empty:
-            df_view['Data Vencimento'] = pd.to_datetime(df_view['promised_date']).dt.date
-            curve = df_view.groupby(['Data Vencimento', 'Status_Prazo']).size().reset_index(name='Volume')
-            
-            fig_curve = px.area(
-                curve, 
-                x='Data Vencimento', 
-                y='Volume', 
-                color='Status_Prazo',
-                color_discrete_map={
-                    "Atrasado": "#FF4B4B", 
-                    "Vence Hoje": "#FFA421", 
-                    "No Prazo": "#09AB3B"
-                }
-            )
-            st.plotly_chart(fig_curve, use_container_width=True)
-        else:
-            st.info("Sem datas para gerar curva.")
+            df_curve = df_view.copy()
+            df_curve['Data_Vencimento'] = pd.to_datetime(df_curve['promised_date'], errors='coerce', dayfirst=True)
+            df_curve = df_curve.dropna(subset=['Data_Vencimento'])
 
-    st.markdown("---")
-    
-    # --- 4. Tabela Detalhada (Legado Melhorado) ---
-    st.subheader(":material/table: Base de Dados Detalhada")
-    
-    # Seleção de Colunas Inteligente
-    cols_padrao = ['package_id', 'seal', 'agência_destino_anotacao', 'promised_date', 'Status_Prazo', 'Categoria']
+            if df_curve.empty:
+                st.info('Sem datas validas para gerar curva.')
+            else:
+                periodos = sorted(df_curve['Data_Vencimento'].dt.to_period('M').unique())
+                if periodos:
+                    hoje_periodo = pd.Timestamp.now().to_period('M')
+                    periodo_default = hoje_periodo if hoje_periodo in periodos else periodos[-1]
+                    labels = [p.strftime('%m/%Y') for p in periodos]
+                    label_default = periodo_default.strftime('%m/%Y')
+                    idx_default = labels.index(label_default) if label_default in labels else len(labels) - 1
+
+                    mes_selecionado = st.selectbox(
+                        'Mes da curva',
+                        options=labels,
+                        index=idx_default,
+                        key='curve_month_filter'
+                    )
+                    periodo_sel = periodos[labels.index(mes_selecionado)]
+
+                    df_mes = df_curve[df_curve['Data_Vencimento'].dt.to_period('M') == periodo_sel].copy()
+                    df_mes['Dia_Mes'] = df_mes['Data_Vencimento'].dt.day
+                    curve = df_mes.groupby(['Dia_Mes', 'Status_Prazo']).size().reset_index(name='Volume')
+
+                    fig_curve = px.area(
+                        curve,
+                        x='Dia_Mes',
+                        y='Volume',
+                        color='Status_Prazo',
+                        color_discrete_map={
+                            STATUS_ATRASADO: '#FF4B4B',
+                            STATUS_VENCE_HOJE: '#FFA421',
+                            STATUS_ATENCAO: '#FFD166',
+                            STATUS_NO_PRAZO: '#09AB3B',
+                        }
+                    )
+                    fig_curve.update_layout(
+                        xaxis_title=f"Dia do mes ({mes_selecionado})",
+                        yaxis_title='Volume'
+                    )
+                    fig_curve.update_xaxes(dtick=1)
+                    st.plotly_chart(fig_curve, use_container_width=True)
+                else:
+                    st.info('Sem periodo mensal disponivel para curva.')
+        else:
+            st.info('Sem datas para gerar curva.')
+
+    st.markdown('---')
+
+    st.subheader(':material/table: Base de Dados Detalhada')
+
+    cols_padrao = ['package_id', 'seal', 'promised_date', 'Status_Prazo', 'Categoria']
+    if agency_col:
+        cols_padrao.insert(2, agency_col)
+
     cols_existentes = [c for c in cols_padrao if c in df_view.columns]
-    
+
+    column_config = {
+        'package_id': 'Pacote',
+        'seal': 'Lacre',
+        'promised_date': st.column_config.DateColumn('Promessa', format='DD/MM/YYYY'),
+        'Status_Prazo': st.column_config.TextColumn('Status'),
+    }
+    if agency_col:
+        column_config[agency_col] = 'Agencia'
+
     st.dataframe(
         df_view[cols_existentes],
         use_container_width=True,
         hide_index=True,
-        column_config={
-            "package_id": "Pacote",
-            "seal": "Lacre",
-            "agência_destino_anotacao": "Agência",
-            "promised_date": st.column_config.DateColumn("Promessa", format="DD/MM/YYYY"),
-            "Status_Prazo": st.column_config.TextColumn("Status"),
-        }
+        column_config=column_config,
     )
+
 
 def render_sla_expedicao(df):
     st.title("Gestão de SLA e Expedição", anchor=False)
@@ -881,7 +1095,7 @@ def render_sla_expedicao(df):
         st.latex(r'''
         \text{Data Limite Expedição} = \text{Data Promessa} - \text{Buffer (1 Dia)} - \text{Tempo Trânsito} - \text{Tempo Agência}
         ''')
-        st.caption("• **Buffer**: Margem de segurança de 1 dia para entrega final.\n• **Tempo Trânsito**: Viagem entre origem e destino.\n• **Tempo Agência**: Processamento interno na ponta.")
+        st.caption("- **Buffer**: Margem de segurança de 1 dia para entrega final.\n- **Tempo Trânsito**: Viagem entre origem e destino.\n- **Tempo Agência**: Processamento interno na ponta.")
 
     # 1. Configuração de Agências
     st.markdown("### :material/settings: Configuração de Prazos")
@@ -924,20 +1138,20 @@ def render_sla_expedicao(df):
     def get_seal_urgency(series):
         if "Atrasado (Crítico)" in series.values:
             return "Crítico"
-        if "Atenção" in series.values:
-             return "Atenção"
         if "Expedir Hoje" in series.values:
             return "Expedir Hoje"
+        if "Atenção" in series.values:
+             return "Atenção"
         return "No Prazo"
 
     # Função Helper para Recomendação
     def get_recommendation(status):
         if status == "Crítico":
-            return "EXPEDIR IMEDIATAMENTE! Risco de Atraso."
+            return "PRAZO VENCIDO. Expedir imediatamente e tratar como atraso confirmado."
         elif status == "Expedir Hoje":
-            return "Priorizar saída no veículo de hoje."
+            return "Vence hoje. Priorizar saída no veículo de hoje."
         elif status == "Atenção":
-            return "Planejar veículo para amanhã."
+            return "Ainda no prazo, mas com risco. Planejar veículo para amanhã."
         else:
             return "Seguir fluxo normal."
 
@@ -945,13 +1159,12 @@ def render_sla_expedicao(df):
         df_view = df_sla.groupby('seal').agg({
             'agência_destino_anotacao': 'first',
             'Data_Limite_Expedicao': 'min',
-            'package_id': 'count',
             'Status_Expedicao': get_seal_urgency
         }).reset_index()
-        
-        df_view.rename(columns={'package_id': 'Qtd Pacotes', 'Data_Limite_Expedicao': 'Expedir Até'}, inplace=True)
-        
-        df_view.rename(columns={'package_id': 'Qtd Pacotes', 'Data_Limite_Expedicao': 'Expedir Até'}, inplace=True)
+
+        df_volume = df_sla.groupby('seal').size().reset_index(name='Qtd Pacotes')
+        df_view = df_view.merge(df_volume, on='seal', how='left')
+        df_view.rename(columns={'Data_Limite_Expedicao': 'Expedir Até'}, inplace=True)
         
         # Adicionar Coluna de Recomendação
         df_view['Ação Recomendada'] = df_view['Status_Expedicao'].apply(get_recommendation)
@@ -1060,16 +1273,29 @@ def render_sla_expedicao(df):
                         pacotes_seal = pacotes_seal.sort_values('promised_date', ascending=True, na_position='last')
                     
                     # Exibir Tabela de Pacotes
+                    cols_pacotes = ['barcode', 'promised_date', 'Status', 'nfe_key', 'company_name']
+                    cols_pacotes_existentes = [c for c in cols_pacotes if c in pacotes_seal.columns]
+
+                    if not cols_pacotes_existentes:
+                        st.info("Nenhuma coluna de pacote disponível para este lacre.")
+                        return
+
+                    col_cfg_pacotes = {}
+                    if "barcode" in cols_pacotes_existentes:
+                        col_cfg_pacotes["barcode"] = st.column_config.TextColumn("Pacote / Barcode")
+                    if "promised_date" in cols_pacotes_existentes:
+                        col_cfg_pacotes["promised_date"] = st.column_config.DateColumn("Vence Em", format="DD/MM/YYYY")
+                    if "Status" in cols_pacotes_existentes:
+                        col_cfg_pacotes["Status"] = st.column_config.TextColumn("Status Entrega")
+                    if "nfe_key" in cols_pacotes_existentes:
+                        col_cfg_pacotes["nfe_key"] = st.column_config.TextColumn("Chave NFe")
+                    if "company_name" in cols_pacotes_existentes:
+                        col_cfg_pacotes["company_name"] = st.column_config.TextColumn("Embarcador")
+
                     st.dataframe(
-                        pacotes_seal[['barcode', 'promised_date', 'Status', 'nfe_key', 'company_name']],
+                        pacotes_seal[cols_pacotes_existentes],
                         use_container_width=True,
-                        column_config={
-                            "barcode": st.column_config.TextColumn("Pacote / Barcode"),
-                            "promised_date": st.column_config.DateColumn("Vence Em", format="DD/MM/YYYY"),
-                            "Status": st.column_config.TextColumn("Status Entrega"),
-                            "nfe_key": st.column_config.TextColumn("Chave NFe"),
-                            "company_name": st.column_config.TextColumn("Embarcador")
-                        },
+                        column_config=col_cfg_pacotes,
                         hide_index=True
                     )
                     
@@ -1077,7 +1303,8 @@ def render_sla_expedicao(df):
                         st.rerun()
         
     else:
-        st.error("⚠️ Coluna 'seal' não encontrada. Verifique se o arquivo contém dados de lacres.")
+        st.error("Coluna 'seal' não encontrada. Verifique se o arquivo contém dados de lacres.")
 
 if __name__ == "__main__":
     main()
+
