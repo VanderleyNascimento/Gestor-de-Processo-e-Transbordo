@@ -1,9 +1,17 @@
+
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![Pandas](https://img.shields.io/badge/pandas-%23150458.svg?style=for-the-badge&logo=pandas&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
+
+
+
+![Setor](https://img.shields.io/badge/Setor-Log%C3%ADstica-orange?style=for-the-badge)
 # 🚚 XDDF - Gestor de Processo e Transbordo
 
 Aplicação analítica em **Streamlit** para gestão logística de pacotes, separando fluxos de **Transbordo** e **Processo**, com foco em visibilidade operacional, SLA e tomada de decisão em tempo real.
 
 ---
-
+![Foco](https://img.shields.io/badge/Foco-Efici%C3%AAncia%20Operacional-blueviolet?style=for-the-badge)
 ## 🚀 Funcionalidades Principais
 
 ### 1. Dashboard Geral
@@ -27,7 +35,7 @@ Aplicação analítica em **Streamlit** para gestão logística de pacotes, sepa
 - Persistência de configuração de transbordo e tempos por agência.
 
 ---
-
+![Status](https://img.shields.io/badge/Status-Ativo-success?style=for-the-badge)
 ## 🛠️ Execução Rápida
 
 ### Windows PowerShell
@@ -59,14 +67,14 @@ python -m streamlit run app.py
 ```
 
 ---
-
+![Testes](https://img.shields.io/badge/Testes-Passando-brightgreen?style=for-the-badge&logo=pytest)
 ## ✅ Testes
 ```bash
 python -m pytest -q
 ```
 
 ---
-
+![Manutenção](https://img.shields.io/badge/Manuten%C3%A7%C3%A3o-Sim-blue?style=for-the-badge)
 ## 📁 Estrutura Principal
 - `app.py`: interface e fluxos das telas.
 - `utils.py`: ingestão, validação, deduplicação e regras de negócio.
@@ -74,7 +82,7 @@ python -m pytest -q
 - `agency_config.json`: tempos de SLA e agências de transbordo.
 
 ---
-
+![Licença: Restrita](https://img.shields.io/badge/Licen%C3%A7a-Restrita-red?style=for-the-badge)
 ## 🔐 Licença, Consentimento e Uso
 
 > **AVISO LEGAL:** este software é protegido por direitos autorais e propriedade intelectual.
@@ -92,7 +100,9 @@ Em resumo: este projeto **não pode ser usado comercialmente sem consentimento e
 
 ## 🤝 Créditos
 
-**Desenvolvido por:** Vanderley Nascimento  
+![Autor: Vanderley Nascimento](https://img.shields.io/badge/Autor-Vanderley%20Nascimento-blue?style=for-the-badge&logo=github)
+![Projeto: The Sheep Lab](https://img.shields.io/badge/Projeto-The%20Sheep%20Lab-white?style=for-the-badge&logo=icloud&logoColor=black)
+
 **Projeto proprietário** para análise logística e eficiência operacional.
 
 © 2026 Vanderley Nascimento. Todos os direitos reservados.
